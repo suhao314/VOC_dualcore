@@ -1,0 +1,73 @@
+version: "3"
+
+# TIG: Telegraf, InfluxDB, Grafana
+
+# 使用 compose 快速启动多个 container
+# 一共启动 influxdb, telegraf 和 grafana 三个 container
+
+services:
+# 服务名称(用户自定义) influxdb
+  influxdb:
+    # 指定容器所使用的镜像
+    image: influxdb:2.7-alpine
+    # 指定容器名(可选)
+    # container_name: influxdb
+    # 挂载一个目录或一个已存在的数据卷容器
+    volumes:
+      ## Mount for influxdb data directory and configuration
+      # 实际位置:container内的位置
+      # - influxdb-storage:/home/suhao314/tig/data/influxdb/:rw
+      - influxdb-storage:/var/lib/influxdb2
+    # env_file adds environment variables to the container based on the file content
+    # env_file can also be a list. 
+    # The files in the list are processed from the top down. 
+    # For the same variable specified in two env files, the value from the last file in the list stands.
+    # 使用 env_file 添加环境变量, env_file 可以同时列出多个文件，从上到下依次指定变量(多次指定同一变量则最后一次生效)
+    env_file:
+      - .env
+    # entrypoint declares the default entrypoint for the service container. 
+    # This overrides the ENTRYPOINT instruction from the service's Dockerfile.
+    # If entrypoint is non-null, Compose ignores any default command from the image, for example the CMD instruction in the Dockerfile.
+    entrypoint: ["./entrypoint.sh"]
+    restart: on-failure:10
+    ports:
+      - 8086:8086
+
+  telegraf:
+    image: telegraf:1.28-alpine
+    # container_name: telegraf
+    volumes:
+    # Mount for telegraf config
+    # - ${TELEGRAF_CFG_PATH}:/etc/telegraf/telegraf.conf:rw
+      - ./telegraf/telegraf_short.conf:/etc/telegraf/telegraf.conf:ro
+    env_file:
+      - .env
+    depends_on:
+      - influxdb
+
+  grafana:
+    image: grafana/grafana-oss
+    # container_name: grafana
+    volumes:
+      - grafana-storage:/home/suhao314/tig/data/grafana
+    depends_on:
+      - influxdb
+    ports:
+    # 端口映射 HOST:CONTAINER
+      - 3000:3000
+
+volumes:
+    grafana-storage: 
+    influxdb-storage:
+        # 将数据存储到指定路径
+        # 不指定则由docker 数据卷机制管理
+        driver: local
+        driver_opts:
+            o: bind
+            type: none
+            device: ./data/influxdb/
+
+
+# docker compose up 后会建立一个以父文件夹名为名的网络: tig 
+# service 下的三个容器/应用 influxdb telegraf grafana 会以各自的名称加入 tig
+# 可以通过 influxdb://influxdb:8086 找到 influx
